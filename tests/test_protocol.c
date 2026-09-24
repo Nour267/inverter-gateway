@@ -8,6 +8,7 @@ void tearDown(void) {}
 
 /* ---- proto_pack_telemetry ---- */
 
+/* Goal: check that every value lands at its offset in the payload, big-endian (4000 -> 0F A0). */
 void test_pack_telemetry_is_big_endian(void)
 {
     /* The values from our M1 CAN test frames */
@@ -31,6 +32,7 @@ void test_pack_telemetry_is_big_endian(void)
     TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, out, 16);
 }
 
+/* Goal: check that a negative temperature (-5.0 °C = -50) is packed as FF CE. */
 void test_pack_telemetry_negative_temperature(void)
 {
     const telemetry_t t = { .temperature = -50 };   /* -5.0 °C */
@@ -43,6 +45,7 @@ void test_pack_telemetry_negative_temperature(void)
 
 /* ---- proto_pack_frame ---- */
 
+/* Goal: check that the frame starts AA 55, then version, type, seq and length (big-endian), then the payload. */
 void test_pack_frame_layout(void)
 {
     const uint8_t payload[2] = {0xAB, 0xCD};
@@ -62,6 +65,7 @@ void test_pack_frame_layout(void)
     TEST_ASSERT_EQUAL_HEX8_ARRAY(expected_start, out, 10);
 }
 
+/* Goal: check that the CRC is calculated over version .. end of payload and stored big-endian. */
 void test_pack_frame_crc_covers_version_to_payload(void)
 {
     const uint8_t payload[2] = {0xAB, 0xCD};
@@ -75,6 +79,7 @@ void test_pack_frame_crc_covers_version_to_payload(void)
     TEST_ASSERT_EQUAL_HEX8((uint8_t)crc,        out[11]);
 }
 
+/* Goal: check that a frame with no payload is exactly 10 bytes (the protocol overhead). */
 void test_pack_frame_empty_payload(void)
 {
     uint8_t out[PROTO_MAX_FRAME];
@@ -82,6 +87,7 @@ void test_pack_frame_empty_payload(void)
     TEST_ASSERT_EQUAL_INT(10, proto_pack_frame(MSG_TELEMETRY, 0, NULL, 0, out, sizeof out));
 }
 
+/* Goal: check that a 257-byte payload is refused (max 256). */
 void test_pack_frame_rejects_payload_too_big(void)
 {
     static uint8_t payload[PROTO_MAX_PAYLOAD + 1];
@@ -91,6 +97,7 @@ void test_pack_frame_rejects_payload_too_big(void)
         proto_pack_frame(MSG_TELEMETRY, 0, payload, 257, out, sizeof out));
 }
 
+/* Goal: check that nothing is written when the frame does not fit in the output buffer. */
 void test_pack_frame_rejects_small_buffer(void)
 {
     const uint8_t payload[16] = {0};
@@ -105,8 +112,10 @@ void test_pack_frame_rejects_small_buffer(void)
 static proto_parser_t parser;
 static proto_frame_t  frame;
 
-/* Test helper: feed n bytes one at a time. Returns the result of the LAST byte,
- * or the first result that isn't PROTO_NEED_MORE (a frame or an error). */
+/* Goal: test helper, feed bytes to the parser one at a time (like bytes from recv()).
+ * In:   bytes = the bytes to feed, n = how many
+ * Out:  the first result that isn't PROTO_NEED_MORE (a frame or an error),
+ *       or PROTO_NEED_MORE if all n bytes were fed without finishing a frame */
 static int feed(const uint8_t *bytes, size_t n)
 {
     int r = PROTO_NEED_MORE;
@@ -119,7 +128,9 @@ static int feed(const uint8_t *bytes, size_t n)
     return r;
 }
 
-/* Test helper: build a TELEMETRY frame with the given seq, return its length */
+/* Goal: test helper, build a full TELEMETRY frame (the M1 test values) to feed to the parser.
+ * In:   seq = the frame number to use, out = buffer of at least PROTO_MAX_FRAME bytes
+ * Out:  the frame length (26 bytes) */
 static int make_frame(uint16_t seq, uint8_t *out)
 {
     const telemetry_t t = { .timestamp = 1000, .state = 2, .temperature = 453,
@@ -130,6 +141,7 @@ static int make_frame(uint16_t seq, uint8_t *out)
     return proto_pack_frame(MSG_TELEMETRY, seq, payload, sizeof payload, out, PROTO_MAX_FRAME);
 }
 
+/* Goal: check that pack -> parse gives back exactly the same type, seq and payload. */
 void test_parse_round_trip(void)
 {
     /* pack -> parse gives back exactly what was packed */
@@ -144,6 +156,7 @@ void test_parse_round_trip(void)
     TEST_ASSERT_EQUAL_HEX8_ARRAY(&buf[8], frame.payload, 16);
 }
 
+/* Goal: check that no frame is reported until its very last byte arrives. */
 void test_parse_needs_every_byte(void)
 {
     /* A frame split into single bytes: no frame until the very last byte */
@@ -155,6 +168,7 @@ void test_parse_needs_every_byte(void)
     TEST_ASSERT_EQUAL_INT(PROTO_FRAME_READY, feed(&buf[n - 1], 1));
 }
 
+/* Goal: check that junk bytes before AA 55 are skipped. */
 void test_parse_skips_garbage_before_sof(void)
 {
     uint8_t buf[5 + PROTO_MAX_FRAME] = {0x13, 0x37, 0xAA, 0x00, 0x55};  /* garbage */
@@ -165,6 +179,7 @@ void test_parse_skips_garbage_before_sof(void)
     TEST_ASSERT_EQUAL_UINT16(7, frame.seq);
 }
 
+/* Goal: check that AA AA 55 is handled: the second AA is the real start. */
 void test_parse_handles_double_aa(void)
 {
     /* AA AA 55 ...: the second AA is the real start */
@@ -175,6 +190,7 @@ void test_parse_handles_double_aa(void)
     TEST_ASSERT_EQUAL_INT(PROTO_FRAME_READY, feed(buf, 1 + (size_t)n));
 }
 
+/* Goal: check that two frames in one stream (like one recv()) are both parsed. */
 void test_parse_two_frames_back_to_back(void)
 {
     uint8_t buf[2 * PROTO_MAX_FRAME];
@@ -188,6 +204,7 @@ void test_parse_two_frames_back_to_back(void)
     TEST_ASSERT_EQUAL_UINT16(2, frame.seq);
 }
 
+/* Goal: check that a damaged frame is rejected, and the next good frame is still parsed. */
 void test_parse_rejects_bad_crc_then_recovers(void)
 {
     uint8_t buf[2 * PROTO_MAX_FRAME];
@@ -201,6 +218,7 @@ void test_parse_rejects_bad_crc_then_recovers(void)
     TEST_ASSERT_EQUAL_UINT16(2, frame.seq);
 }
 
+/* Goal: check that a header with payload_len 257 is rejected right after the header. */
 void test_parse_rejects_payload_len_257(void)
 {
     /* Header says 257 bytes (0x0101): rejected right after the header, before any payload */
@@ -210,6 +228,7 @@ void test_parse_rejects_payload_len_257(void)
     TEST_ASSERT_EQUAL_INT(PROTO_ERR_LEN, feed(buf, sizeof buf));
 }
 
+/* Goal: check that a frame with an unknown version is rejected. */
 void test_parse_rejects_bad_version(void)
 {
     const uint8_t buf[] = {0xAA, 0x55, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00};
@@ -218,6 +237,7 @@ void test_parse_rejects_bad_version(void)
     TEST_ASSERT_EQUAL_INT(PROTO_ERR_VERSION, feed(buf, sizeof buf));
 }
 
+/* Goal: check that seq 65535 followed by 0 both parse correctly. */
 void test_parse_seq_wraparound(void)
 {
     /* seq 65535 is followed by 0: both must parse correctly */
