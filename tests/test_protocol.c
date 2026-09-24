@@ -1,4 +1,4 @@
-/* Unit tests for protocol.c (pack) */
+/* Unit tests for protocol.c (pack + parse) */
 #include "unity.h"
 #include "protocol.h"
 #include "crc16.h"
@@ -100,6 +100,138 @@ void test_pack_frame_rejects_small_buffer(void)
         proto_pack_frame(MSG_TELEMETRY, 0, payload, 16, out, sizeof out));
 }
 
+/* ---- Parser ---- */
+
+static proto_parser_t parser;
+static proto_frame_t  frame;
+
+/* Test helper: feed n bytes one at a time. Returns the result of the LAST byte,
+ * or the first result that isn't PROTO_NEED_MORE (a frame or an error). */
+static int feed(const uint8_t *bytes, size_t n)
+{
+    int r = PROTO_NEED_MORE;
+    for (size_t i = 0; i < n; i++) {
+        r = proto_parse_byte(&parser, bytes[i], &frame);
+        if (r != PROTO_NEED_MORE) {
+            return r;
+        }
+    }
+    return r;
+}
+
+/* Test helper: build a TELEMETRY frame with the given seq, return its length */
+static int make_frame(uint16_t seq, uint8_t *out)
+{
+    const telemetry_t t = { .timestamp = 1000, .state = 2, .temperature = 453,
+                            .dc_voltage = 4000, .dc_current = 850,
+                            .ac_power = 3200, .ac_voltage = 2305 };
+    uint8_t payload[TELEMETRY_PAYLOAD_LEN];
+    proto_pack_telemetry(&t, payload);
+    return proto_pack_frame(MSG_TELEMETRY, seq, payload, sizeof payload, out, PROTO_MAX_FRAME);
+}
+
+void test_parse_round_trip(void)
+{
+    /* pack -> parse gives back exactly what was packed */
+    uint8_t buf[PROTO_MAX_FRAME];
+    int n = make_frame(42, buf);
+    proto_parser_init(&parser);
+
+    TEST_ASSERT_EQUAL_INT(PROTO_FRAME_READY, feed(buf, (size_t)n));
+    TEST_ASSERT_EQUAL_HEX8(MSG_TELEMETRY, frame.msg_type);
+    TEST_ASSERT_EQUAL_UINT16(42, frame.seq);
+    TEST_ASSERT_EQUAL_UINT16(16, frame.payload_len);
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(&buf[8], frame.payload, 16);
+}
+
+void test_parse_needs_every_byte(void)
+{
+    /* A frame split into single bytes: no frame until the very last byte */
+    uint8_t buf[PROTO_MAX_FRAME];
+    int n = make_frame(1, buf);
+    proto_parser_init(&parser);
+
+    TEST_ASSERT_EQUAL_INT(PROTO_NEED_MORE, feed(buf, (size_t)n - 1));
+    TEST_ASSERT_EQUAL_INT(PROTO_FRAME_READY, feed(&buf[n - 1], 1));
+}
+
+void test_parse_skips_garbage_before_sof(void)
+{
+    uint8_t buf[5 + PROTO_MAX_FRAME] = {0x13, 0x37, 0xAA, 0x00, 0x55};  /* garbage */
+    int n = make_frame(7, &buf[5]);
+    proto_parser_init(&parser);
+
+    TEST_ASSERT_EQUAL_INT(PROTO_FRAME_READY, feed(buf, 5 + (size_t)n));
+    TEST_ASSERT_EQUAL_UINT16(7, frame.seq);
+}
+
+void test_parse_handles_double_aa(void)
+{
+    /* AA AA 55 ...: the second AA is the real start */
+    uint8_t buf[1 + PROTO_MAX_FRAME] = {0xAA};
+    int n = make_frame(8, &buf[1]);
+    proto_parser_init(&parser);
+
+    TEST_ASSERT_EQUAL_INT(PROTO_FRAME_READY, feed(buf, 1 + (size_t)n));
+}
+
+void test_parse_two_frames_back_to_back(void)
+{
+    uint8_t buf[2 * PROTO_MAX_FRAME];
+    int n1 = make_frame(1, buf);
+    int n2 = make_frame(2, &buf[n1]);
+    proto_parser_init(&parser);
+
+    TEST_ASSERT_EQUAL_INT(PROTO_FRAME_READY, feed(buf, (size_t)n1));
+    TEST_ASSERT_EQUAL_UINT16(1, frame.seq);
+    TEST_ASSERT_EQUAL_INT(PROTO_FRAME_READY, feed(&buf[n1], (size_t)n2));
+    TEST_ASSERT_EQUAL_UINT16(2, frame.seq);
+}
+
+void test_parse_rejects_bad_crc_then_recovers(void)
+{
+    uint8_t buf[2 * PROTO_MAX_FRAME];
+    int n1 = make_frame(1, buf);
+    int n2 = make_frame(2, &buf[n1]);
+    buf[10] ^= 0x01;                       /* damage one bit in the first frame's payload */
+    proto_parser_init(&parser);
+
+    TEST_ASSERT_EQUAL_INT(PROTO_ERR_CRC, feed(buf, (size_t)n1));
+    TEST_ASSERT_EQUAL_INT(PROTO_FRAME_READY, feed(&buf[n1], (size_t)n2));   /* resync */
+    TEST_ASSERT_EQUAL_UINT16(2, frame.seq);
+}
+
+void test_parse_rejects_payload_len_257(void)
+{
+    /* Header says 257 bytes (0x0101): rejected right after the header, before any payload */
+    const uint8_t buf[] = {0xAA, 0x55, 0x01, 0x01, 0x00, 0x00, 0x01, 0x01};
+    proto_parser_init(&parser);
+
+    TEST_ASSERT_EQUAL_INT(PROTO_ERR_LEN, feed(buf, sizeof buf));
+}
+
+void test_parse_rejects_bad_version(void)
+{
+    const uint8_t buf[] = {0xAA, 0x55, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00};
+    proto_parser_init(&parser);
+
+    TEST_ASSERT_EQUAL_INT(PROTO_ERR_VERSION, feed(buf, sizeof buf));
+}
+
+void test_parse_seq_wraparound(void)
+{
+    /* seq 65535 is followed by 0: both must parse correctly */
+    uint8_t buf[2 * PROTO_MAX_FRAME];
+    int n1 = make_frame(65535, buf);
+    int n2 = make_frame(0, &buf[n1]);
+    proto_parser_init(&parser);
+
+    TEST_ASSERT_EQUAL_INT(PROTO_FRAME_READY, feed(buf, (size_t)n1));
+    TEST_ASSERT_EQUAL_UINT16(65535, frame.seq);
+    TEST_ASSERT_EQUAL_INT(PROTO_FRAME_READY, feed(&buf[n1], (size_t)n2));
+    TEST_ASSERT_EQUAL_UINT16(0, frame.seq);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -110,5 +242,14 @@ int main(void)
     RUN_TEST(test_pack_frame_empty_payload);
     RUN_TEST(test_pack_frame_rejects_payload_too_big);
     RUN_TEST(test_pack_frame_rejects_small_buffer);
+    RUN_TEST(test_parse_round_trip);
+    RUN_TEST(test_parse_needs_every_byte);
+    RUN_TEST(test_parse_skips_garbage_before_sof);
+    RUN_TEST(test_parse_handles_double_aa);
+    RUN_TEST(test_parse_two_frames_back_to_back);
+    RUN_TEST(test_parse_rejects_bad_crc_then_recovers);
+    RUN_TEST(test_parse_rejects_payload_len_257);
+    RUN_TEST(test_parse_rejects_bad_version);
+    RUN_TEST(test_parse_seq_wraparound);
     return UNITY_END();
 }

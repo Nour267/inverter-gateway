@@ -21,7 +21,12 @@
 #define TELEMETRY_PAYLOAD_LEN  16
 
 /* Return codes */
+#define PROTO_NEED_MORE    0   /* parser: frame not complete yet, keep feeding bytes */
+#define PROTO_FRAME_READY  1   /* parser: a valid frame is in *out */
 #define PROTO_ERR_ARG     -1   /* payload too big, or the output buffer is too small */
+#define PROTO_ERR_VERSION -2   /* parser: unknown version */
+#define PROTO_ERR_LEN     -3   /* parser: payload_len > 256 */
+#define PROTO_ERR_CRC     -4   /* parser: CRC mismatch (damaged frame) */
 
 /* One TELEMETRY record: the values from both CAN frames + a timestamp.
  * Values stay scaled integers, exactly as decoded from CAN. */
@@ -49,5 +54,44 @@ size_t proto_pack_telemetry(const telemetry_t *t, uint8_t *out);
 int proto_pack_frame(uint8_t msg_type, uint16_t seq,
                      const uint8_t *payload, uint16_t payload_len,
                      uint8_t *out, size_t out_size);
+
+/* ---- Parser (receiving side) ---- */
+
+/* The parser's states (DESIGN.md §5.3) */
+typedef enum {
+    PS_WAIT_SOF1,     /* waiting for 0xAA */
+    PS_WAIT_SOF2,     /* waiting for 0x55 */
+    PS_HEADER,        /* reading version, msg_type, seq, payload_len (6 bytes) */
+    PS_PAYLOAD,       /* reading payload_len bytes */
+    PS_CRC            /* reading the 2 CRC bytes */
+} proto_state_t;
+
+/* A received, checked frame */
+typedef struct {
+    uint8_t  msg_type;
+    uint16_t seq;
+    uint16_t payload_len;
+    uint8_t  payload[PROTO_MAX_PAYLOAD];
+} proto_frame_t;
+
+/* The parser's memory between bytes. Fixed size, no malloc. */
+typedef struct {
+    proto_state_t state;
+    uint8_t  buf[PROTO_MAX_FRAME];   /* bytes after AA 55: header, payload, CRC */
+    size_t   count;                  /* how many bytes are in buf so far */
+    uint16_t payload_len;            /* from the header */
+} proto_parser_t;
+
+/* Goal: reset the parser to its start state (waiting for AA).
+ * In:   p = the parser
+ * Out:  nothing returned */
+void proto_parser_init(proto_parser_t *p);
+
+/* Goal: feed ONE received byte to the parser. Call it for every byte from recv().
+ * In:   p = the parser, byte = the next byte, out = where to put a finished frame
+ * Out:  PROTO_NEED_MORE (keep going), PROTO_FRAME_READY (*out is a valid frame),
+ *       or an error (PROTO_ERR_VERSION / _LEN / _CRC). On error the parser
+ *       resets itself and looks for the next AA 55. */
+int proto_parse_byte(proto_parser_t *p, uint8_t byte, proto_frame_t *out);
 
 #endif /* PROTOCOL_H */
