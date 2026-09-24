@@ -1,0 +1,9 @@
+# Build output (make creates it, make clean deletes it)
+build/
+*.o
+
+# Programs built on Windows by the VS Code task
+*.exe
+
+# Python cache
+__pycache__/

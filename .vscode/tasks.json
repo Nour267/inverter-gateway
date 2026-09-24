@@ -1,0 +1,14 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build & Run current C file",
+            "type": "shell",
+            "command": "C:\\MinGW\\bin\\gcc.exe -Wall -o '${fileDirname}\\${fileBasenameNoExtension}.exe' '${file}'; if ($?) { & '${fileDirname}\\${fileBasenameNoExtension}.exe' }",
+            "options": { "shell": { "executable": "powershell.exe" } },
+            "group": { "kind": "build", "isDefault": true },
+            "presentation": { "focus": true, "panel": "dedicated", "clear": true },
+            "problemMatcher": ["$gcc"]
+        }
+    ]
+}
