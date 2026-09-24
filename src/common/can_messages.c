@@ -31,6 +31,26 @@ static uint32_t get_u32_le(const uint8_t *p)
          | ((uint32_t)p[3] << 24);
 }
 
+/* Goal: split one number into 2 bytes, little-endian (low byte first). Opposite of get_u16_le.
+ * In:   out = where to write 2 bytes, v = the number, e.g. 4000 = 0x0FA0
+ * Out:  nothing returned; out[0..1] = A0 0F */
+static void put_u16_le(uint8_t *out, uint16_t v)
+{
+    out[0] = (uint8_t)(v);
+    out[1] = (uint8_t)(v >> 8);
+}
+
+/* Goal: split one number into 4 bytes, little-endian (low byte first). Opposite of get_u32_le.
+ * In:   out = where to write 4 bytes, v = the number, e.g. 3600 = 0x00000E10
+ * Out:  nothing returned; out[0..3] = 10 0E 00 00 */
+static void put_u32_le(uint8_t *out, uint32_t v)
+{
+    out[0] = (uint8_t)(v);
+    out[1] = (uint8_t)(v >> 8);
+    out[2] = (uint8_t)(v >> 16);
+    out[3] = (uint8_t)(v >> 24);
+}
+
 /* ---- Decoders ---- */
 
 /* Goal: turn the raw bytes of frame 0x100 INVERTER_STATUS into checked values
@@ -97,4 +117,28 @@ int can_decode_power(const uint8_t *data, uint8_t len, inverter_power_t *out)
     /* 4. All good: give the result to the caller */
     *out = p;
     return CAN_OK;
+}
+
+/* ---- Encoders (used by the simulator: the inverter side) ---- */
+
+/* Goal: turn status values into the 8 data bytes of frame 0x100. Opposite of can_decode_status.
+ * In:   s = the values, data = buffer of 8 bytes to fill
+ * Out:  nothing returned; data = state, fault, temperature (2), uptime (4), little-endian */
+void can_encode_status(const inverter_status_t *s, uint8_t data[8])
+{
+    data[0] = (uint8_t)s->state;
+    data[1] = s->fault_code;
+    put_u16_le(&data[2], (uint16_t)s->temperature);   /* same bits: -50 -> CE FF */
+    put_u32_le(&data[4], s->uptime);
+}
+
+/* Goal: turn power values into the 8 data bytes of frame 0x101. Opposite of can_decode_power.
+ * In:   p = the values, data = buffer of 8 bytes to fill
+ * Out:  nothing returned; data = 4 values x 2 bytes, little-endian (4000 -> A0 0F) */
+void can_encode_power(const inverter_power_t *p, uint8_t data[8])
+{
+    put_u16_le(&data[0], p->dc_voltage);
+    put_u16_le(&data[2], p->dc_current);
+    put_u16_le(&data[4], p->ac_power);
+    put_u16_le(&data[6], p->ac_voltage);
 }

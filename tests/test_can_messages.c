@@ -114,6 +114,49 @@ void test_status_rejects_temperature_too_low(void)
     TEST_ASSERT_EQUAL_INT(CAN_ERR_RANGE, can_decode_status(data, 8, &s));
 }
 
+/* ---- Encoders ---- */
+
+/* Goal: check that encoding our known values gives exactly the M1 test frame. */
+void test_power_encodes_known_frame(void)
+{
+    const inverter_power_t p = { .dc_voltage = 4000, .dc_current = 850,
+                                 .ac_power = 3200, .ac_voltage = 2305 };
+    const uint8_t expected[8] = {0xA0, 0x0F, 0x52, 0x03, 0x80, 0x0C, 0x01, 0x09};
+    uint8_t data[8];
+
+    can_encode_power(&p, data);
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, data, 8);
+}
+
+/* Goal: check that encoding a status with -5.0 °C gives CE FF for the temperature. */
+void test_status_encodes_negative_temperature(void)
+{
+    const inverter_status_t s = { .state = INV_STATE_PRODUCING, .fault_code = 0,
+                                  .temperature = -50, .uptime = 3600 };
+    const uint8_t expected[8] = {0x02, 0x00, 0xCE, 0xFF, 0x10, 0x0E, 0x00, 0x00};
+    uint8_t data[8];
+
+    can_encode_status(&s, data);
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, data, 8);
+}
+
+/* Goal: check that encode -> decode gives back the same values (the simulator and
+ *       the gateway agree on the format). */
+void test_status_encode_decode_round_trip(void)
+{
+    const inverter_status_t in = { .state = INV_STATE_FAULT, .fault_code = 17,
+                                   .temperature = 1234, .uptime = 90000 };
+    inverter_status_t out;
+    uint8_t data[8];
+
+    can_encode_status(&in, data);
+    TEST_ASSERT_EQUAL_INT(CAN_OK, can_decode_status(data, 8, &out));
+    TEST_ASSERT_EQUAL_INT(in.state, out.state);
+    TEST_ASSERT_EQUAL_UINT8(in.fault_code, out.fault_code);
+    TEST_ASSERT_EQUAL_INT16(in.temperature, out.temperature);
+    TEST_ASSERT_EQUAL_UINT32(in.uptime, out.uptime);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -128,5 +171,8 @@ int main(void)
     RUN_TEST(test_status_rejects_unknown_state);
     RUN_TEST(test_status_rejects_temperature_too_high);
     RUN_TEST(test_status_rejects_temperature_too_low);
+    RUN_TEST(test_power_encodes_known_frame);
+    RUN_TEST(test_status_encodes_negative_temperature);
+    RUN_TEST(test_status_encode_decode_round_trip);
     return UNITY_END();
 }

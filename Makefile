@@ -1,7 +1,14 @@
 CC     = gcc
 CFLAGS = -Wall -Wextra -std=c11 -g
 
-all: build/hello
+all: build/hello build/inverter_sim
+
+# Inverter simulator (Linux only: uses SocketCAN). -lm = link the math library (sin)
+SIM_SRCS = src/sim/inverter_sim.c src/common/can_messages.c src/bus/bus_socketcan.c
+
+build/inverter_sim: $(SIM_SRCS) include/bus.h include/can_messages.h
+	mkdir -p build
+	$(CC) $(CFLAGS) -Iinclude $(SIM_SRCS) -lm -o build/inverter_sim
 
 # Link: .o -> program
 build/hello: build/hello.o

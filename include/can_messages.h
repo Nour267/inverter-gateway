@@ -50,4 +50,16 @@ int can_decode_status(const uint8_t *data, uint8_t len, inverter_status_t *out);
  * Out:  CAN_OK (and *out filled), CAN_ERR_LEN or CAN_ERR_RANGE. On error, *out is not touched. */
 int can_decode_power(const uint8_t *data, uint8_t len, inverter_power_t *out);
 
+/* Goal: turn status values into the 8 data bytes of frame 0x100 (used by the simulator).
+ *       The opposite of can_decode_status.
+ * In:   s = the values, data = buffer of 8 bytes to fill
+ * Out:  nothing returned; data[0..7] filled, little-endian */
+void can_encode_status(const inverter_status_t *s, uint8_t data[8]);
+
+/* Goal: turn power values into the 8 data bytes of frame 0x101 (used by the simulator).
+ *       The opposite of can_decode_power.
+ * In:   p = the values, data = buffer of 8 bytes to fill
+ * Out:  nothing returned; data[0..7] filled, little-endian (4000 -> A0 0F) */
+void can_encode_power(const inverter_power_t *p, uint8_t data[8]);
+
 #endif /* CAN_MESSAGES_H */
