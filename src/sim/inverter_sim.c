@@ -1,7 +1,7 @@
 /* Inverter simulator (DESIGN.md §7): a fake inverter that sends CAN frames 0x100 and 0x101
  * every second on vcan0, following a sun curve over a short "day" (1 day = 2 minutes).
  *
- * Usage: ./build/inverter_sim [--if vcan0] [--fault-at N] [--bad-frames]
+ * Usage: ./build/inverter_sim [--bus vcan0] [--fault-at N] [--bad-frames]
  *
  * Note: this runs on a PC, so it uses float math freely. The real inverter would send the
  * same scaled integers; only the way it makes up the values differs. */
@@ -97,14 +97,14 @@ int main(int argc, char **argv)
     int bad_frames = 0;
 
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--if") == 0 && i + 1 < argc) {
+        if (strcmp(argv[i], "--bus") == 0 && i + 1 < argc) {
             ifname = argv[++i];
         } else if (strcmp(argv[i], "--fault-at") == 0 && i + 1 < argc) {
             fault_at = atol(argv[++i]);
         } else if (strcmp(argv[i], "--bad-frames") == 0) {
             bad_frames = 1;
         } else {
-            fprintf(stderr, "usage: %s [--if vcan0] [--fault-at N] [--bad-frames]\n", argv[0]);
+            fprintf(stderr, "usage: %s [--bus vcan0] [--fault-at N] [--bad-frames]\n", argv[0]);
             return 1;
         }
     }
