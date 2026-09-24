@@ -12,15 +12,23 @@ build/hello.o: src/hello.c
 	mkdir -p build
 	$(CC) $(CFLAGS) -c src/hello.c -o build/hello.o
 
-# Unit tests: test file + code under test + Unity, built into one program
-TEST_SRCS = tests/test_can_messages.c src/common/can_messages.c tests/unity/unity.c
+# Unit tests: each test program = test file + code under test + Unity
+TEST_FLAGS = $(CFLAGS) -Iinclude -Itests/unity
 
-build/test_can_messages: $(TEST_SRCS) include/can_messages.h
+CAN_TEST_SRCS = tests/test_can_messages.c src/common/can_messages.c tests/unity/unity.c
+CRC_TEST_SRCS = tests/test_crc16.c src/common/crc16.c tests/unity/unity.c
+
+build/test_can_messages: $(CAN_TEST_SRCS) include/can_messages.h
 	mkdir -p build
-	$(CC) $(CFLAGS) -Iinclude -Itests/unity $(TEST_SRCS) -o build/test_can_messages
+	$(CC) $(TEST_FLAGS) $(CAN_TEST_SRCS) -o build/test_can_messages
 
-test: build/test_can_messages
+build/test_crc16: $(CRC_TEST_SRCS) include/crc16.h
+	mkdir -p build
+	$(CC) $(TEST_FLAGS) $(CRC_TEST_SRCS) -o build/test_crc16
+
+test: build/test_can_messages build/test_crc16
 	./build/test_can_messages
+	./build/test_crc16
 
 clean:
 	rm -rf build
