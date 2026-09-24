@@ -1,7 +1,7 @@
 CC     = gcc
 CFLAGS = -Wall -Wextra -std=c11 -g
 
-all: build/hello build/inverter_sim build/gateway
+all: build/gateway build/inverter_sim
 
 # Gateway (Linux only): main loop + all the common logic + the SocketCAN bus layer
 GW_SRCS = src/gateway/main.c src/gateway/uplink.c src/common/can_messages.c \
@@ -18,15 +18,6 @@ SIM_SRCS = src/sim/inverter_sim.c src/common/can_messages.c src/bus/bus_socketca
 build/inverter_sim: $(SIM_SRCS) include/bus.h include/can_messages.h
 	mkdir -p build
 	$(CC) $(CFLAGS) -Iinclude $(SIM_SRCS) -lm -o build/inverter_sim
-
-# Link: .o -> program
-build/hello: build/hello.o
-	$(CC) build/hello.o -o build/hello
-
-# Compile: .c -> .o
-build/hello.o: src/hello.c
-	mkdir -p build
-	$(CC) $(CFLAGS) -c src/hello.c -o build/hello.o
 
 # Unit tests: each test program = test file + code under test + Unity
 TEST_FLAGS = $(CFLAGS) -Iinclude -Itests/unity
@@ -52,7 +43,11 @@ test: build/test_can_messages build/test_crc16 build/test_protocol
 	./build/test_crc16
 	./build/test_protocol
 
+# Integration test: server + gateway + simulator together (needs vcan0)
+demo:
+	./scripts/run_demo.sh
+
 clean:
 	rm -rf build
 
-.PHONY: all test clean
+.PHONY: all test demo clean
