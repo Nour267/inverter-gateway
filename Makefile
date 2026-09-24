@@ -4,10 +4,11 @@ CFLAGS = -Wall -Wextra -std=c11 -g
 all: build/hello build/inverter_sim build/gateway
 
 # Gateway (Linux only): main loop + all the common logic + the SocketCAN bus layer
-GW_SRCS = src/gateway/main.c src/common/can_messages.c src/common/protocol.c \
-          src/common/crc16.c src/bus/bus_socketcan.c
+GW_SRCS = src/gateway/main.c src/gateway/uplink.c src/common/can_messages.c \
+          src/common/protocol.c src/common/crc16.c src/bus/bus_socketcan.c
 
-build/gateway: $(GW_SRCS) include/bus.h include/can_messages.h include/protocol.h include/crc16.h
+build/gateway: $(GW_SRCS) include/bus.h include/can_messages.h include/protocol.h \
+               include/crc16.h include/uplink.h
 	mkdir -p build
 	$(CC) $(CFLAGS) -Iinclude $(GW_SRCS) -o build/gateway
 
