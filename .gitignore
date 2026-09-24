@@ -7,3 +7,7 @@ build/
 
 # Python cache
 __pycache__/
+
+# Private notes
+INSTRUCTIONS.md
+LEARNING_NOTES.md
