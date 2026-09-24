@@ -6,8 +6,9 @@
 #include <stdint.h>
 #include <stddef.h>
 
-/* Calculate the CRC of len bytes starting at data.
- * In: bytes + their count.  Out: the 16-bit CRC (0xFFFF for 0 bytes). */
+/* Goal: calculate the CRC "seal" of some bytes, so the receiver can detect damaged data.
+ * In:   data = pointer to the bytes, len = how many bytes
+ * Out:  the 16-bit CRC, e.g. "123456789" -> 0x29B1 (0 bytes -> 0xFFFF) */
 uint16_t crc16(const uint8_t *data, size_t len);
 
 #endif /* CRC16_H */

@@ -4,6 +4,9 @@
 #define CRC16_POLY  0x1021
 #define CRC16_INIT  0xFFFF
 
+/* Goal: calculate the CRC "seal" of some bytes, so the receiver can detect damaged data.
+ * In:   data = pointer to the bytes, len = how many bytes
+ * Out:  the 16-bit CRC, e.g. "123456789" -> 0x29B1 (0 bytes -> 0xFFFF) */
 uint16_t crc16(const uint8_t *data, size_t len)
 {
     uint16_t crc = CRC16_INIT;

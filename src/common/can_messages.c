@@ -11,15 +11,18 @@
 
 /* ---- Little-endian helpers (private to this file) ---- */
 
-/* Glue 2 received bytes (low byte first) into one number.
- * In: pointer to 2 bytes, e.g. A0 0F.  Out: uint16_t, e.g. 0x0FA0 = 4000. */
+/* Goal: glue 2 received bytes (little-endian, low byte first) into one number.
+ * In:   p = pointer to the first of 2 bytes, e.g. A0 0F
+ * Out:  the number as uint16_t, e.g. 0x0FA0 = 4000 */
 static uint16_t get_u16_le(const uint8_t *p)
 {
     return (uint16_t)(p[0] | (p[1] << 8));
 }
 
-/* Glue 4 received bytes (low byte first) into one number (used for uptime).
- * In: pointer to 4 bytes, e.g. 10 0E 00 00.  Out: uint32_t, e.g. 0x00000E10 = 3600. */
+/* Goal: glue 4 received bytes (little-endian, low byte first) into one number.
+ *       Used for uptime, which is too big for 2 bytes.
+ * In:   p = pointer to the first of 4 bytes, e.g. 10 0E 00 00
+ * Out:  the number as uint32_t, e.g. 0x00000E10 = 3600 */
 static uint32_t get_u32_le(const uint8_t *p)
 {
     return  (uint32_t)p[0]
@@ -30,8 +33,12 @@ static uint32_t get_u32_le(const uint8_t *p)
 
 /* ---- Decoders ---- */
 
-/* Decode frame 0x100 INVERTER_STATUS.
- * In: 8 data bytes + their length.  Out: *out filled; returns CAN_OK, CAN_ERR_LEN or CAN_ERR_RANGE. */
+/* Goal: turn the raw bytes of frame 0x100 INVERTER_STATUS into checked values
+ *       (state, fault code, temperature, uptime).
+ * In:   data = the frame's data bytes, len = how many arrived (must be 8),
+ *       out  = the caller's struct to fill
+ * Out:  CAN_OK (and *out filled), CAN_ERR_LEN (len != 8) or CAN_ERR_RANGE (bad value).
+ *       On error, *out is not touched. */
 int can_decode_status(const uint8_t *data, uint8_t len, inverter_status_t *out)
 {
     /* 1. Check the length */
@@ -61,8 +68,12 @@ int can_decode_status(const uint8_t *data, uint8_t len, inverter_status_t *out)
     return CAN_OK;
 }
 
-/* Decode frame 0x101 INVERTER_POWER.
- * In: 8 data bytes + their length.  Out: *out filled; returns CAN_OK, CAN_ERR_LEN or CAN_ERR_RANGE. */
+/* Goal: turn the raw bytes of frame 0x101 INVERTER_POWER into checked values
+ *       (DC voltage, DC current, AC power, AC voltage).
+ * In:   data = the frame's data bytes, len = how many arrived (must be 8),
+ *       out  = the caller's struct to fill
+ * Out:  CAN_OK (and *out filled), CAN_ERR_LEN (len != 8) or CAN_ERR_RANGE (bad value).
+ *       On error, *out is not touched. */
 int can_decode_power(const uint8_t *data, uint8_t len, inverter_power_t *out)
 {
     /* 1. Check the length */

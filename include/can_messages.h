@@ -40,9 +40,14 @@ typedef struct {
     uint16_t ac_voltage;     /* 0.1 V   (2305 = 230.5 V) */
 } inverter_power_t;
 
-/* Decode the 8 data bytes of a frame into *out.
- * Return CAN_OK, CAN_ERR_LEN or CAN_ERR_RANGE. On error, *out is not valid. */
+/* Goal: turn the raw bytes of frame 0x100 into checked status values.
+ * In:   data = the frame's data bytes, len = how many arrived (must be 8), out = struct to fill
+ * Out:  CAN_OK (and *out filled), CAN_ERR_LEN or CAN_ERR_RANGE. On error, *out is not touched. */
 int can_decode_status(const uint8_t *data, uint8_t len, inverter_status_t *out);
-int can_decode_power (const uint8_t *data, uint8_t len, inverter_power_t  *out);
+
+/* Goal: turn the raw bytes of frame 0x101 into checked power values.
+ * In:   data = the frame's data bytes, len = how many arrived (must be 8), out = struct to fill
+ * Out:  CAN_OK (and *out filled), CAN_ERR_LEN or CAN_ERR_RANGE. On error, *out is not touched. */
+int can_decode_power(const uint8_t *data, uint8_t len, inverter_power_t *out);
 
 #endif /* CAN_MESSAGES_H */
